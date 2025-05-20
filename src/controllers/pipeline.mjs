@@ -1,7 +1,11 @@
 import axios from 'axios';
+import authenticateToken from '../middleware/jwt.mjs';
+import generalLimiter from '../middleware/limiter.mjs';
+
+const RANDOMMER_API_KEY = ' 556d39da9c754da6b9f3c7260b500891';
 
 const headers = {
-  'X-Api-Key': '556d39da9c754da6b9f3c7260b500891'
+  'X-Api-Key': RANDOMMER_API_KEY
 };
 
 const getRandomUser = () => axios.get('https://randomuser.me/api/').then((res) => res.data.results[0]);
@@ -21,7 +25,7 @@ class Pipeline {
   }
 
   registerRoute() {
-    this.app.get('/generate', async (req, res) => {
+    this.app.get('/pipeline', authenticateToken, generalLimiter, async (req, res) => {
       try {
         const [user, phone, iban, card, fullname] = await Promise.all([
           getRandomUser(),

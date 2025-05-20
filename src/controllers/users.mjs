@@ -1,26 +1,19 @@
+/* eslint-disable consistent-return */
 import UserModel from '../models/user.mjs';
+import authenticateToken from '../middleware/jwt.mjs';
+import generalLimiter from '../middleware/limiter.mjs';
 
 const Users = class Users {
-  constructor(app, connect, authToken) {
+  constructor(app, connect) {
     this.app = app;
     this.UserModel = connect.model('User', UserModel);
-    this.authToken = authToken;
 
     this.run();
   }
 
   deleteById() {
-    this.app.delete('/user/:id', this.authToken, (req, res) => {
+    this.app.delete('/user/:id', generalLimiter, authenticateToken, (req, res) => {
       try {
-        if (req.auth.role !== 'admin') {
-          res.status(401).json({
-            code: 401,
-            message: 'You are member you need to be admin'
-          });
-
-          return;
-        }
-
         this.UserModel.findByIdAndDelete(req.params.id).then((user) => {
           res.status(200).json(user || {});
         }).catch(() => {
@@ -41,17 +34,8 @@ const Users = class Users {
   }
 
   showById() {
-    this.app.get('/user/:id', this.authToken, (req, res) => {
+    this.app.get('/user/:id', generalLimiter, authenticateToken, (req, res) => {
       try {
-        if (req.auth.role !== 'admin') {
-          res.status(401).json({
-            code: 401,
-            message: 'You are member you need to be admin'
-          });
-
-          return;
-        }
-
         this.UserModel.findById(req.params.id).then((user) => {
           res.status(200).json(user || {});
         }).catch(() => {
@@ -71,25 +55,15 @@ const Users = class Users {
     });
   }
 
-  show() {
-    this.app.get('/users/', this.authToken, (req, res) => {
+  create() {
+    this.app.post('/user/', generalLimiter, (req, res) => {
       try {
-        if (req.auth.role !== 'admin') {
-          res.status(401).json({
-            code: 401,
-            message: 'You are member you need to be admin'
-          });
+        const userModel = new this.UserModel(req.body);
 
-          return;
-        }
-
-        this.UserModel.find({}).then((users) => {
-          res.status(200).json(users || []);
+        userModel.save().then((user) => {
+          res.status(200).json(user || {});
         }).catch(() => {
-          res.status(500).json({
-            code: 500,
-            message: 'Internal server error'
-          });
+          res.status(200).json({});
         });
       } catch (err) {
         console.error(`[ERROR] users/create -> ${err}`);
@@ -102,10 +76,45 @@ const Users = class Users {
     });
   }
 
+  updateById() {
+    this.app.put('/user/:id', generalLimiter, authenticateToken, (req, res) => {
+      try {
+        this.UserModel.findByIdAndUpdate(
+          req.params.id,
+          req.body,
+          { new: true }
+        ).then((user) => {
+          if (!user) {
+            return res.status(404).json({
+              code: 404,
+              message: 'No user found'
+            });
+          }
+          res.status(200).json(user);
+        }).catch((err) => {
+          res.status(500).json({
+            code: 500,
+            message: 'internal server error',
+            error: err.message,
+            stack: err.stack
+          });
+        });
+      } catch (err) {
+        console.error(`[ERROR] users/:id -> ${err}`);
+
+        res.status(400).json({
+          code: 400,
+          message: 'bad request'
+        });
+      }
+    });
+  }
+
   run() {
-    this.show();
+    this.create();
     this.showById();
     this.deleteById();
+    this.updateById();
   }
 };
 

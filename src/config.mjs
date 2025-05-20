@@ -5,12 +5,12 @@ dotenv.config();
 export default {
   development: {
     type: 'development',
-    port: 3000,
-    mongodb: 'mongodb+srv://thomascoutarel:5l6a1EYF5SZGF5le@api.qrznb.mongodb.net/api'
+    port: process.env.PORT,
+    mongodb: process.env.MONGODB_URI
   },
   production: {
     type: 'production',
-    port: 3000,
-    mongodb: 'mongodb+srv://thomascoutarel:5l6a1EYF5SZGF5le@api.qrznb.mongodb.net/api'
+    port: process.env.PORT,
+    mongodb: process.env.MONGODB_URI
   }
 };

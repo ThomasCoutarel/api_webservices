@@ -5,21 +5,26 @@ import bodyParser from 'body-parser';
 import compression from 'compression';
 import cors from 'cors';
 import helmet from 'helmet';
-import jwt from 'jsonwebtoken';
-import dotenv from 'dotenv';
-import redis from 'redis';
-import rateLimit from 'express-limiter';
+import https from 'https';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 // Core
+import fs from 'fs';
 import config from './config.mjs';
 import routes from './controllers/routes.mjs';
 
-dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const Server = class Server {
   constructor() {
     this.app = express();
     this.config = config[process.argv[2]] || config.development;
+    this.sslOptions = {
+      key: fs.readFileSync(path.join(__dirname, 'ssl', 'key.pem')),
+      cert: fs.readFileSync(path.join(__dirname, 'ssl', 'cert.pem'))
+    };
   }
 
   async dbConnect() {
@@ -69,57 +74,17 @@ const Server = class Server {
 
   middleware() {
     this.app.use(compression());
-
-    const allowedOrigins = process.env.ALLOWED_ORIGINS
-      ? process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim())
-      : [];
-
-    this.app.use(cors({
-      origin: (origin, callback) => {
-        if (!origin) return callback(null, true);
-        if (allowedOrigins.includes(origin)) {
-          return callback(null, true);
-        } else {
-          return callback(new Error(`Origin ${origin} not allowed by CORS`));
-        }
-      }
-    }));
-
+    this.app.use(cors({ origin: false }));
     this.app.use(bodyParser.urlencoded({ extended: true }));
     this.app.use(bodyParser.json());
-
-    // Ajout du rate limiter ici
-    this.rateLimiter();
-  }
-
-  rateLimiter() {
-    // Initialiser Redis
-    const client = redis.createClient({ legacyMode: true });
-    client.connect().catch(console.error);
-
-    const limiter = rateLimit(this.app, client);
-
-    limiter({
-      path: '*',
-      method: 'all',
-      lookup: ['connection.remoteAddress'],
-      total: 100,
-      expire: 1000 * 60 * 60, // 1 heure
-      onRateLimited: (req, res) => {
-        res.status(429).json({
-          code: 429,
-          message: "Trop de requêtes"
-        });
-      }
-    });
   }
 
   routes() {
-    new routes.Photos(this.app, this.connect, this.authToken);
-    new routes.Albums(this.app, this.connect, this.authToken);
-    new routes.Users(this.app, this.connect, this.authToken);
-    new routes.pipeline(this.app);
-    new routes.Auth(this.app);
+    new routes.Users(this.app, this.connect);
+    new routes.Albums(this.app, this.connect);
+    new routes.Photos(this.app, this.connect);
+    new routes.Auth(this.app, this.connect);
+    new routes.Pipeline(this.app, this.connect);
 
     this.app.use((req, res) => {
       res.status(404).json({
@@ -134,36 +99,16 @@ const Server = class Server {
     this.app.disable('x-powered-by');
   }
 
-  authToken(req, res, next) {
-    const token = req.headers.authorization;
-
-    if (!token) {
-      return res.status(403).json({
-        code: 403,
-        message: 'Token manquant'
-      });
-    }
-
-    jwt.verify(token, process.env.JWT_SECRET, (err, data) => {
-      if (err) {
-        return res.status(401).json({
-          code: 401,
-          message: 'Token invalide'
-        });
-      }
-
-      req.auth = data;
-      next();
-    });
-  }
-
   async run() {
     try {
       await this.dbConnect();
       this.security();
-      this.middleware(); // inclut maintenant le rateLimiter
+      this.middleware();
       this.routes();
-      this.app.listen(this.config.port);
+
+      https.createServer(this.sslOptions, this.app).listen(this.config.port, () => {
+        console.log(`Serveur HTTPS lancé sur https://localhost:${this.config.port}`);
+      });
     } catch (err) {
       console.error(`[ERROR] Server -> ${err}`);
     }
