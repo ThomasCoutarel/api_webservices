@@ -7,7 +7,8 @@ import cors from 'cors';
 import helmet from 'helmet';
 import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
-
+import redis from 'redis';
+import rateLimit from 'express-limiter';
 
 // Core
 import config from './config.mjs';
@@ -68,13 +69,13 @@ const Server = class Server {
 
   middleware() {
     this.app.use(compression());
+
     const allowedOrigins = process.env.ALLOWED_ORIGINS
       ? process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim())
       : [];
 
     this.app.use(cors({
       origin: (origin, callback) => {
-        // Si pas d'origine (ex: Postman ou appel backend), on autorise
         if (!origin) return callback(null, true);
         if (allowedOrigins.includes(origin)) {
           return callback(null, true);
@@ -86,6 +87,31 @@ const Server = class Server {
 
     this.app.use(bodyParser.urlencoded({ extended: true }));
     this.app.use(bodyParser.json());
+
+    // Ajout du rate limiter ici
+    this.rateLimiter();
+  }
+
+  rateLimiter() {
+    // Initialiser Redis
+    const client = redis.createClient({ legacyMode: true });
+    client.connect().catch(console.error);
+
+    const limiter = rateLimit(this.app, client);
+
+    limiter({
+      path: '*',
+      method: 'all',
+      lookup: ['connection.remoteAddress'],
+      total: 100,
+      expire: 1000 * 60 * 60, // 1 heure
+      onRateLimited: (req, res) => {
+        res.status(429).json({
+          code: 429,
+          message: "Trop de requêtes"
+        });
+      }
+    });
   }
 
   routes() {
@@ -93,8 +119,6 @@ const Server = class Server {
     new routes.Albums(this.app, this.connect, this.authToken);
     new routes.Users(this.app, this.connect, this.authToken);
     new routes.Auth(this.app);
-
-
 
     this.app.use((req, res) => {
       res.status(404).json({
@@ -132,12 +156,11 @@ const Server = class Server {
     });
   }
 
-
   async run() {
     try {
       await this.dbConnect();
       this.security();
-      this.middleware();
+      this.middleware(); // inclut maintenant le rateLimiter
       this.routes();
       this.app.listen(this.config.port);
     } catch (err) {
