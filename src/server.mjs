@@ -118,6 +118,7 @@ const Server = class Server {
     new routes.Photos(this.app, this.connect, this.authToken);
     new routes.Albums(this.app, this.connect, this.authToken);
     new routes.Users(this.app, this.connect, this.authToken);
+    new routes.pipeline(this.app);
     new routes.Auth(this.app);
 
     this.app.use((req, res) => {
