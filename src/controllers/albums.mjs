@@ -1,45 +1,39 @@
 import AlbumModel from '../models/album.mjs';
-import PhotoModel from '../models/photto.mjs';
+import authenticateToken from '../middleware/jwt.mjs';
+import generalLimiter from '../middleware/limiter.mjs';
 
 const Albums = class Albums {
   constructor(app, connect) {
     this.app = app;
     this.AlbumModel = connect.model('Album', AlbumModel);
-    this.PhotoModel = connect.model('Photo', PhotoModel);
 
     this.run();
   }
 
   deleteById() {
-    this.app.delete('/album/:id', async (req, res) => {
+    this.app.delete('/album/:id', generalLimiter, authenticateToken, (req, res) => {
       try {
-        const album = await this.AlbumModel.findByIdAndDelete(req.params.id);
-        if (!album) return res.status(404).json({ message: 'Album non trouvé' });
-
-        await this.PhotoModel.deleteMany({ album: req.params.id });
-        return res.status(200).json(album);
+        this.AlbumModel.findByIdAndDelete(req.params.id).populate('photos').then((album) => {
+          res.status(200).json(album || {});
+        }).catch(() => {
+          res.status(500).json({
+            code: 500,
+            message: 'Internal Server error'
+          });
+        });
       } catch (err) {
-        console.error(`[ERROR] DELETE /album/${req.params.id} ->`, err);
-        return res.status(500).json({ message: 'Internal Server error' });
-      }
-    });
-  }
+        console.error(`[ERROR] album/:id -> ${err}`);
 
-  updateById() {
-    this.app.put('/album/:id', (req, res) => {
-      try {
-        this.AlbumModel.findByIdAndUpdate(req.params.id, req.body, { new: true })
-          .then((album) => res.status(200).json(album || {}))
-          .catch(() => res.status(500).json({ code: 500, message: 'Internal Server error' }));
-      } catch (err) {
-        console.error(`[ERROR] PUT /album/:id -> ${err}`);
-        res.status(400).json({ code: 400, message: 'Bad request' });
+        res.status(400).json({
+          code: 400,
+          message: 'Bad request'
+        });
       }
     });
   }
 
   showById() {
-    this.app.get('/album/:id', (req, res) => {
+    this.app.get('/album/:id', generalLimiter, authenticateToken, (req, res) => {
       try {
         this.AlbumModel.findById(req.params.id).then((album) => {
           res.status(200).json(album || {});
@@ -50,7 +44,7 @@ const Albums = class Albums {
           });
         });
       } catch (err) {
-        console.error(`[ERROR] albums/:id -> ${err}`);
+        console.error(`[ERROR] album/:id -> ${err}`);
 
         res.status(400).json({
           code: 400,
@@ -61,44 +55,39 @@ const Albums = class Albums {
   }
 
   create() {
-    this.app.post('/album/', (req, res) => {
+    this.app.post('/album/', generalLimiter, authenticateToken, async (req, res) => {
       try {
-        const albumModel = new this.AlbumModel(req.body);
-
-        albumModel.save().then((album) => {
-          res.status(200).json(album || {});
-        }).catch(() => {
-          res.status(200).json({});
-        });
+        let album = new this.AlbumModel(req.body);
+        album = await album.save();
+        album = await album.populate('photos');
+        res.status(201).json(album);
       } catch (err) {
-        console.error(`[ERROR] albums/create -> ${err}`);
-
-        res.status(400).json({
-          code: 400,
-          message: 'Bad request'
-        });
+        console.error(`[ERROR] album/create -> ${err}`);
+        res.status(400).json({ code: 400, message: 'Bad request' });
       }
     });
   }
 
-  getAll() {
-    this.app.get('/albums', (req, res) => {
+  updateById() {
+    this.app.put('/album/:id', generalLimiter, authenticateToken, async (req, res) => {
       try {
-        const { title } = req.query;
-        const filter = title ? { title: { $regex: title, $options: 'i' } } : {};
-        this.AlbumModel.find(filter).then((albums) => {
-          res.status(200).json(albums || []);
-        }).catch(() => {
-          res.status(500).json({
-            code: 500,
-            message: 'Internal Server error'
+        const albumId = req.params.id;
+        const album = await this.AlbumModel.findByIdAndUpdate(albumId, req.body, { new: true });
+
+        if (!album) {
+          return res.status(404).json({
+            code: 404,
+            message: 'Album not found'
           });
-        });
+        }
+
+        return res.status(200).json(album);
       } catch (err) {
-        console.error(`[ERROR] GET /albums -> ${err}`);
-        res.status(400).json({
-          code: 400,
-          message: 'Bad request'
+        console.error('[ERROR] update album/:id ->', err);
+        return res.status(500).json({
+          code: 500,
+          message: 'Internal server error',
+          error: err.message
         });
       }
     });
@@ -109,7 +98,6 @@ const Albums = class Albums {
     this.showById();
     this.deleteById();
     this.updateById();
-    this.getAll();
   }
 };
 
