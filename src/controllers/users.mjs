@@ -1,16 +1,26 @@
 import UserModel from '../models/user.mjs';
 
 const Users = class Users {
-  constructor(app, connect) {
+  constructor(app, connect, authToken) {
     this.app = app;
     this.UserModel = connect.model('User', UserModel);
+    this.authToken = authToken;
 
     this.run();
   }
 
   deleteById() {
-    this.app.delete('/user/:id', (req, res) => {
+    this.app.delete('/user/:id', this.authToken, (req, res) => {
       try {
+        if (req.auth.role !== 'admin') {
+          res.status(401).json({
+            code: 401,
+            message: 'You are member you need to be admin'
+          });
+
+          return;
+        }
+
         this.UserModel.findByIdAndDelete(req.params.id).then((user) => {
           res.status(200).json(user || {});
         }).catch(() => {
@@ -31,8 +41,17 @@ const Users = class Users {
   }
 
   showById() {
-    this.app.get('/user/:id', (req, res) => {
+    this.app.get('/user/:id', this.authToken, (req, res) => {
       try {
+        if (req.auth.role !== 'admin') {
+          res.status(401).json({
+            code: 401,
+            message: 'You are member you need to be admin'
+          });
+
+          return;
+        }
+
         this.UserModel.findById(req.params.id).then((user) => {
           res.status(200).json(user || {});
         }).catch(() => {
@@ -52,15 +71,25 @@ const Users = class Users {
     });
   }
 
-  create() {
-    this.app.post('/user/', (req, res) => {
+  show() {
+    this.app.get('/users/', this.authToken, (req, res) => {
       try {
-        const userModel = new this.UserModel(req.body);
+        if (req.auth.role !== 'admin') {
+          res.status(401).json({
+            code: 401,
+            message: 'You are member you need to be admin'
+          });
 
-        userModel.save().then((user) => {
-          res.status(200).json(user || {});
+          return;
+        }
+
+        this.UserModel.find({}).then((users) => {
+          res.status(200).json(users || []);
         }).catch(() => {
-          res.status(200).json({});
+          res.status(500).json({
+            code: 500,
+            message: 'Internal server error'
+          });
         });
       } catch (err) {
         console.error(`[ERROR] users/create -> ${err}`);
@@ -74,7 +103,7 @@ const Users = class Users {
   }
 
   run() {
-    this.create();
+    this.show();
     this.showById();
     this.deleteById();
   }

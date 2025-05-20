@@ -12,12 +12,17 @@
   "author": "Cyril Vimard",
   "license": "ISC",
   "dependencies": {
+    "better-validator": "^2.1.9",
     "body-parser": "^1.20.2",
     "compression": "^1.7.4",
     "cors": "^2.8.5",
+    "dotenv": "^16.5.0",
     "express": "^4.18.2",
-    "helmet": "^7.0.0",
-    "mongoose": "^7.2.4"
+    "express-limiter": "^1.6.1",
+    "helmet": "^7.2.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^7.2.4",
+    "redis": "^5.0.1"
   },
   "devDependencies": {
     "eslint": "^8.42.0",

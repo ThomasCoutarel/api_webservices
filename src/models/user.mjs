@@ -1,11 +1,8 @@
 import mongoose from 'mongoose';
 
 const Schema = new mongoose.Schema({
-  firstname: String,
-  lastname: String,
-  avatar: String,
-  age: Number,
-  city: String
+  name: String,
+  role: String
 }, {
   collection: 'users',
   minimize: false,

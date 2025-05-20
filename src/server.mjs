@@ -5,10 +5,15 @@ import bodyParser from 'body-parser';
 import compression from 'compression';
 import cors from 'cors';
 import helmet from 'helmet';
+import jwt from 'jsonwebtoken';
+import dotenv from 'dotenv';
+
 
 // Core
 import config from './config.mjs';
 import routes from './controllers/routes.mjs';
+
+dotenv.config();
 
 const Server = class Server {
   constructor() {
@@ -63,14 +68,32 @@ const Server = class Server {
 
   middleware() {
     this.app.use(compression());
-    this.app.use(cors());
+    const allowedOrigins = process.env.ALLOWED_ORIGINS
+      ? process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim())
+      : [];
+
+    this.app.use(cors({
+      origin: (origin, callback) => {
+        // Si pas d'origine (ex: Postman ou appel backend), on autorise
+        if (!origin) return callback(null, true);
+        if (allowedOrigins.includes(origin)) {
+          return callback(null, true);
+        } else {
+          return callback(new Error(`Origin ${origin} not allowed by CORS`));
+        }
+      }
+    }));
+
     this.app.use(bodyParser.urlencoded({ extended: true }));
     this.app.use(bodyParser.json());
   }
 
   routes() {
-    new routes.Photos(this.app, this.connect);
-    new routes.Albums(this.app, this.connect);
+    new routes.Photos(this.app, this.connect, this.authToken);
+    new routes.Albums(this.app, this.connect, this.authToken);
+    new routes.Users(this.app, this.connect, this.authToken);
+    new routes.Auth(this.app);
+
 
 
     this.app.use((req, res) => {
@@ -85,6 +108,30 @@ const Server = class Server {
     this.app.use(helmet());
     this.app.disable('x-powered-by');
   }
+
+  authToken(req, res, next) {
+    const token = req.headers.authorization;
+
+    if (!token) {
+      return res.status(403).json({
+        code: 403,
+        message: 'Token manquant'
+      });
+    }
+
+    jwt.verify(token, process.env.JWT_SECRET, (err, data) => {
+      if (err) {
+        return res.status(401).json({
+          code: 401,
+          message: 'Token invalide'
+        });
+      }
+
+      req.auth = data;
+      next();
+    });
+  }
+
 
   async run() {
     try {

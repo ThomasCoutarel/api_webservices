@@ -2,16 +2,26 @@ import PhotoModel from '../models/photto.mjs';
 import AlbumModel from '../models/album.mjs';
 
 const Photos = class Photos {
-  constructor(app, connect) {
+  constructor(app, connect, authToken) {
     this.app = app;
     this.PhotoModel = connect.model('Photo', PhotoModel);
     this.AlbumModel = connect.model('Album', AlbumModel);
+    this.authToken = authToken;
     this.run();
   }
 
   getAllPhotos() {
-    this.app.get('/album/:idalbum/photos', (req, res) => {
+    this.app.get('/album/:idalbum/photos', this.authToken, (req, res) => {
       try {
+        if (req.auth.role !== 'admin') {
+          res.status(401).json({
+            code: 401,
+            message: 'You are member you need to be admin'
+          });
+
+          return;
+        }
+
         this.PhotoModel.find({ album: req.params.idalbum })
           .populate('album')
           .then((photos) => res.status(200).json(photos || []))
@@ -24,8 +34,17 @@ const Photos = class Photos {
   }
 
   getPhotoById() {
-    this.app.get('/album/:idalbum/photo/:idphotos', (req, res) => {
+    this.app.get('/album/:idalbum/photo/:idphotos', this.authToken, (req, res) => {
       try {
+        if (req.auth.role !== 'admin') {
+          res.status(401).json({
+            code: 401,
+            message: 'You are member you need to be admin'
+          });
+
+          return;
+        }
+
         this.PhotoModel.findOne({ _id: req.params.idphotos, album: req.params.idalbum })
           .populate('album')
           .then((photo) => res.status(200).json(photo || {}))
@@ -78,10 +97,16 @@ const Photos = class Photos {
     });
   }
 
-  // controllers/photos.mjs
   deletePhoto() {
-    this.app.delete('/album/:idalbum/photo/:idphotos', async (req, res) => {
+    this.app.delete('/album/:idalbum/photo/:idphotos', this.authToken, async (req, res) => {
       try {
+        if (req.auth.role !== 'admin') {
+          return res.status(401).json({
+            code: 401,
+            message: 'You are member you need to be admin'
+          });
+        }
+
         const { idalbum, idphotos } = req.params;
         const session = await this.PhotoModel.startSession();
         session.startTransaction();

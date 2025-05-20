@@ -2,16 +2,17 @@ import AlbumModel from '../models/album.mjs';
 import PhotoModel from '../models/photto.mjs';
 
 const Albums = class Albums {
-  constructor(app, connect) {
+  constructor(app, connect, authToken) {
     this.app = app;
     this.AlbumModel = connect.model('Album', AlbumModel);
     this.PhotoModel = connect.model('Photo', PhotoModel);
+    this.authToken = authToken;
 
     this.run();
   }
 
   deleteById() {
-    this.app.delete('/album/:id', async (req, res) => {
+    this.app.delete('/album/:id', this.authToken, async (req, res) => {
       try {
         const album = await this.AlbumModel.findByIdAndDelete(req.params.id);
         if (!album) return res.status(404).json({ message: 'Album non trouvé' });
@@ -26,7 +27,7 @@ const Albums = class Albums {
   }
 
   updateById() {
-    this.app.put('/album/:id', (req, res) => {
+    this.app.put('/album/:id', this.authToken, (req, res) => {
       try {
         this.AlbumModel.findByIdAndUpdate(req.params.id, req.body, { new: true })
           .then((album) => res.status(200).json(album || {}))
@@ -39,7 +40,7 @@ const Albums = class Albums {
   }
 
   showById() {
-    this.app.get('/album/:id', (req, res) => {
+    this.app.get('/album/:id', this.authToken, (req, res) => {
       try {
         this.AlbumModel.findById(req.params.id).then((album) => {
           res.status(200).json(album || {});
@@ -61,7 +62,7 @@ const Albums = class Albums {
   }
 
   create() {
-    this.app.post('/album/', (req, res) => {
+    this.app.post('/album/', this.authToken, (req, res) => {
       try {
         const albumModel = new this.AlbumModel(req.body);
 
@@ -82,7 +83,7 @@ const Albums = class Albums {
   }
 
   getAll() {
-    this.app.get('/albums', (req, res) => {
+    this.app.get('/albums', this.authToken, (req, res) => {
       try {
         const { title } = req.query;
         const filter = title ? { title: { $regex: title, $options: 'i' } } : {};
