@@ -93,11 +93,32 @@ const Albums = class Albums {
     });
   }
 
+  getAll() {
+    this.app.get('/albums', generalLimiter, authenticateToken, async (req, res) => {
+      try {
+        const { title } = req.query;
+
+        const filter = title ? { title: { $regex: title, $options: 'i' } } : {};
+
+        const albums = await this.AlbumModel.find(filter).populate('photos');
+        res.status(200).json(albums || []);
+      } catch (err) {
+        console.error(`[ERROR] GET /albums -> ${err}`);
+        res.status(500).json({
+          code: 500,
+          message: 'Internal server error',
+          error: err.message
+        });
+      }
+    });
+  }
+
   run() {
     this.create();
     this.showById();
     this.deleteById();
     this.updateById();
+    this.getAll();
   }
 };
 
